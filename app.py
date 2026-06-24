@@ -1,6 +1,12 @@
 import streamlit as st
 from datetime import date
-from pawpal_system import Owner, Pet, Task, Scheduler, DailySchedule, ScheduledTask
+from pawpal_system import Owner, Pet, Task, Scheduler, DailySchedule, ScheduledTask, save_to_json, load_from_json
+from formatting_utils import (
+    format_priority_indicator, format_status_badge, get_task_emoji, get_species_emoji,
+    format_task_list_table, format_schedule_table, format_pet_summary_table,
+    format_summary_stats, format_conflict_warning, format_success_message,
+    format_warning_message, format_info_message, format_error_message
+)
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 
@@ -11,12 +17,20 @@ st.markdown(
 Welcome to the PawPal+ interactive demo.
 
 Use this app to create pets, add care tasks, and generate daily schedules.
+
+Your data is automatically saved and will persist between sessions! 💾
 """
 )
 
 # Initialize owner in session state (maintains state across Streamlit reruns)
 if "owner" not in st.session_state:
-    st.session_state.owner = Owner(name="Jordan", available_hours_per_day=4)
+    # Try to load existing data
+    loaded_owner = load_from_json("data.json")
+    if loaded_owner:
+        st.session_state.owner = loaded_owner
+        st.success("✓ Loaded your saved data!")
+    else:
+        st.session_state.owner = Owner(name="Jordan", available_hours_per_day=4)
 
 owner = st.session_state.owner
 
@@ -25,11 +39,17 @@ st.divider()
 st.subheader("👤 Owner & Pet Setup")
 col1, col2 = st.columns(2)
 with col1:
-    owner.name = st.text_input("Owner name", value=owner.name)
+    new_name = st.text_input("Owner name", value=owner.name)
+    if new_name != owner.name:
+        owner.name = new_name
+        save_to_json(owner, "data.json")
 with col2:
-    owner.available_hours_per_day = st.number_input(
+    new_hours = st.number_input(
         "Available hours per day", min_value=1, max_value=24, value=owner.available_hours_per_day
     )
+    if new_hours != owner.available_hours_per_day:
+        owner.available_hours_per_day = new_hours
+        save_to_json(owner, "data.json")
 
 st.markdown("### Add a Pet")
 st.caption("Create a new pet and add it to your care plan.")
@@ -43,15 +63,25 @@ with col2:
 if st.button("Add pet"):
     new_pet = Pet(name=new_pet_name, species=new_pet_species, owner=owner)
     owner.add_pet(new_pet)
-    st.success(f"✓ Added {new_pet_name} ({new_pet_species}) to your pets!")
+    save_to_json(owner, "data.json")
+    species_emoji = get_species_emoji(new_pet_species)
+    st.success(f"✅ Added {species_emoji} {new_pet_name} ({new_pet_species}) to your pets!")
     st.rerun()
 
 if owner.pets:
-    st.write("**Your pets:**")
-    pet_list = [f"{pet.display_info()}" for pet in owner.pets]
-    st.table({"Pet": pet_list})
+    st.write("**Your Pets:**")
+    pet_data = [
+        {
+            "name": pet.name,
+            "species": pet.species,
+            "task_count": len(pet.tasks)
+        }
+        for pet in owner.pets
+    ]
+    pet_table = format_pet_summary_table(pet_data)
+    st.code(pet_table, language=None)
 else:
-    st.info("No pets yet. Add one above!")
+    st.info("🐾 No pets yet. Add one above!")
 
 st.divider()
 
@@ -73,7 +103,11 @@ if owner.pets:
     if st.button("Add task"):
         new_task = Task(title=task_title, duration_minutes=int(duration), priority=priority)
         selected_pet.add_task(new_task)
-        st.success(f"✓ Added task '{task_title}' to {selected_pet_name}!")
+        save_to_json(owner, "data.json")
+        task_emoji = get_task_emoji(task_title)
+        pet_emoji = get_species_emoji(selected_pet.species)
+        priority_indicator = format_priority_indicator(priority)
+        st.success(f"✅ Added {task_emoji} '{task_title}' ({priority_indicator}) to {pet_emoji} {selected_pet_name}!")
         st.rerun()
 
     all_tasks = owner.get_all_tasks()
@@ -107,36 +141,37 @@ if owner.pets:
         # Conflict detection
         conflicts = scheduler.detect_time_conflicts(all_tasks)
         if conflicts:
-            st.warning("⚠️ **Time Conflicts Detected!**")
+            st.warning("⚠️  **Time Conflicts Detected!**")
             for conflict in conflicts:
                 st.write(conflict)
             st.caption("These tasks have overlapping preferred time windows. Consider rescheduling one of them to avoid conflicts.")
         else:
-            st.success("✓ No time conflicts detected!")
+            st.success("✅ No time conflicts detected!")
 
         # Display tasks in professional table
         if display_tasks:
             task_data = []
             for task in display_tasks:
-                status_indicator = "✓ Done" if task.completed else "○ Pending"
-                time_window = f"{task.preferred_time_window[0]}–{task.preferred_time_window[1]}" if task.preferred_time_window else "No time set"
+                status = "completed" if task.completed else "pending"
+                time_window = f"{task.preferred_time_window[0]}—{task.preferred_time_window[1]}" if task.preferred_time_window else "Flexible"
 
                 task_data.append({
-                    "Status": status_indicator,
-                    "Pet": task.pet.name if task.pet else "Unknown",
-                    "Task": task.title,
-                    "Duration": f"{task.duration_minutes} min",
-                    "Priority": task.priority.capitalize(),
-                    "Time Window": time_window,
-                    "Recurring": task.recurring.capitalize()
+                    "status": status,
+                    "pet": task.pet.name if task.pet else "Unknown",
+                    "species": task.pet.species if task.pet else "other",
+                    "title": task.title,
+                    "duration": task.duration_minutes,
+                    "priority": task.priority,
+                    "time_window": time_window
                 })
-            st.table(task_data)
+            task_table = format_task_list_table(task_data)
+            st.code(task_table, language=None)
         else:
-            st.info("No tasks match your filters.")
+            st.info("📋 No tasks match your filters.")
     else:
-        st.info("No tasks yet. Add one above!")
+        st.info("📋 No tasks yet. Add one above!")
 else:
-    st.info("Add a pet first to start creating tasks.")
+    st.info("🐾 Add a pet first to start creating tasks.")
 
 st.divider()
 
@@ -160,33 +195,53 @@ if st.button("Generate schedule for today", type="primary"):
             for scheduled_task in daily_schedule.scheduled_tasks:
                 task = scheduled_task.task
                 schedule_data.append({
-                    "Time": scheduled_task.format_time(),
-                    "Task": task.title,
-                    "Pet": task.pet.name if task.pet else "Unknown",
-                    "Duration": f"{task.duration_minutes} min",
-                    "Priority": task.priority.capitalize()
+                    "time": scheduled_task.format_time(),
+                    "task": task.title,
+                    "pet": task.pet.name if task.pet else "Unknown",
+                    "species": task.pet.species if task.pet else "other",
+                    "duration": task.duration_minutes,
+                    "priority": task.priority.capitalize()
                 })
-            st.table(schedule_data)
-            st.success(f"✓ Scheduled {len(daily_schedule.scheduled_tasks)} task(s) for today")
+            schedule_table = format_schedule_table(schedule_data)
+            st.code(schedule_table, language=None)
+            st.success(f"✅ Scheduled {len(daily_schedule.scheduled_tasks)} task(s) for today")
         else:
-            st.info("No tasks scheduled for today.")
+            st.info("📅 No tasks scheduled for today.")
 
         # Show dropped tasks with warning if any
         if daily_schedule.dropped_tasks:
-            st.warning("⚠️ **Could Not Fit All Tasks**")
-            st.caption(f"The following {len(daily_schedule.dropped_tasks)} task(s) don't fit in your available time. Consider scheduling them for another day:")
+            st.warning(f"⚠️  **Could Not Fit All Tasks** ({len(daily_schedule.dropped_tasks)} task(s))")
+            st.caption("Consider scheduling these for another day:")
 
             dropped_data = []
             for task in daily_schedule.dropped_tasks:
                 dropped_data.append({
-                    "Task": task.title,
-                    "Pet": task.pet.name if task.pet else "Unknown",
-                    "Duration": f"{task.duration_minutes} min",
-                    "Priority": task.priority.capitalize()
+                    "title": task.title,
+                    "pet": task.pet.name if task.pet else "Unknown",
+                    "species": task.pet.species if task.pet else "other",
+                    "duration": task.duration_minutes,
+                    "priority": task.priority.capitalize(),
+                    "status": "pending"
                 })
-            st.table(dropped_data)
+
+            task_table = format_task_list_table(dropped_data)
+            st.code(task_table, language=None)
         else:
-            st.success("✓ All tasks fit in your available time!")
+            st.success("✅ All tasks fit in your available time!")
+
+        # Show summary statistics
+        total_tasks = len(daily_schedule.scheduled_tasks) + len(daily_schedule.dropped_tasks)
+        used_minutes = daily_schedule.get_total_duration()
+        available_minutes = owner.available_hours_per_day * 60
+
+        summary = format_summary_stats(
+            total_tasks=total_tasks,
+            completed_tasks=sum(1 for t in daily_schedule.scheduled_tasks if t.task.completed),
+            dropped_tasks=len(daily_schedule.dropped_tasks),
+            used_minutes=used_minutes,
+            available_minutes=available_minutes
+        )
+        st.code(summary, language=None)
 
         # Show detailed reasoning in an expander
         with st.expander("📊 View detailed reasoning"):

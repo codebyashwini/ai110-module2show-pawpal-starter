@@ -3,6 +3,7 @@ PawPal+ Backend Logic Layer
 Classes for managing pets, owners, tasks, and scheduling.
 """
 
+import json
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional
@@ -38,6 +39,29 @@ class Owner:
             all_tasks.extend(pet.tasks)
         return all_tasks
 
+    def to_dict(self) -> Dict:
+        """Converts Owner to a dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "available_hours_per_day": self.available_hours_per_day,
+            "preferences": self.preferences,
+            "pets": [pet.to_dict() for pet in self.pets]
+        }
+
+    @staticmethod
+    def from_dict(data: Dict) -> 'Owner':
+        """Reconstructs Owner from a dictionary."""
+        owner = Owner(
+            name=data["name"],
+            available_hours_per_day=data["available_hours_per_day"],
+            preferences=data.get("preferences", {})
+        )
+        # Pets will be set via Pet.from_dict() to maintain circular references
+        for pet_data in data.get("pets", []):
+            pet = Pet.from_dict(pet_data, owner)
+            owner.add_pet(pet)
+        return owner
+
 
 @dataclass
 class Pet:
@@ -59,6 +83,23 @@ class Pet:
         """Adds a task to the pet's task list."""
         task.pet = self
         self.tasks.append(task)
+
+    def to_dict(self) -> Dict:
+        """Converts Pet to a dictionary for JSON serialization."""
+        return {
+            "name": self.name,
+            "species": self.species,
+            "tasks": [task.to_dict() for task in self.tasks]
+        }
+
+    @staticmethod
+    def from_dict(data: Dict, owner: Owner) -> 'Pet':
+        """Reconstructs Pet from a dictionary. Owner must be provided to restore the reference."""
+        pet = Pet(name=data["name"], species=data["species"], owner=owner)
+        for task_data in data.get("tasks", []):
+            task = Task.from_dict(task_data)
+            pet.add_task(task)
+        return pet
 
 
 @dataclass
@@ -85,6 +126,40 @@ class Task:
         """Marks the task as completed."""
         self.completed = True
 
+    def to_dict(self) -> Dict:
+        """Converts Task to a dictionary for JSON serialization. Dates are converted to ISO format strings."""
+        return {
+            "title": self.title,
+            "duration_minutes": self.duration_minutes,
+            "priority": self.priority,
+            "recurring": self.recurring,
+            "due_date": self.due_date.isoformat() if self.due_date else None,
+            "preferred_time_window": self.preferred_time_window,
+            "completed": self.completed
+        }
+
+    @staticmethod
+    def from_dict(data: Dict) -> 'Task':
+        """Reconstructs Task from a dictionary. Converts ISO date strings back to date objects."""
+        due_date = None
+        if data.get("due_date"):
+            due_date = date.fromisoformat(data["due_date"])
+
+        preferred_time_window = None
+        if data.get("preferred_time_window"):
+            window = data["preferred_time_window"]
+            preferred_time_window = tuple(window) if isinstance(window, list) else window
+
+        return Task(
+            title=data["title"],
+            duration_minutes=data["duration_minutes"],
+            priority=data["priority"],
+            recurring=data.get("recurring", "one-time"),
+            due_date=due_date,
+            preferred_time_window=preferred_time_window,
+            completed=data.get("completed", False)
+        )
+
 
 class Scheduler:
     """The engine that produces daily plans."""
@@ -105,7 +180,7 @@ class Scheduler:
             all_tasks = self.owner.get_all_tasks()
 
         available_minutes = self.owner.available_hours_per_day * 60
-        sorted_tasks = self.sort_tasks_by_priority(all_tasks)
+        sorted_tasks = self.sort_tasks_by_priority_then_time(all_tasks)
         scheduled_tasks, dropped_tasks = self.fit_tasks_in_time(sorted_tasks, available_minutes)
 
         scheduled_task_objs = self._create_scheduled_tasks(scheduled_tasks, target_date)
@@ -150,6 +225,38 @@ class Scheduler:
             time_in_minutes = hours * 60 + minutes
 
             return (time_in_minutes, task.title)
+
+        return sorted(task_list, key=get_sort_key)
+
+    def sort_tasks_by_priority_then_time(self, tasks: Optional[List[Task]] = None) -> List[Task]:
+        """
+        Sort tasks by priority first (high → medium → low), then by time within each priority tier.
+
+        This is the primary scheduling algorithm: critical tasks are scheduled first,
+        and within each priority level, tasks with earlier preferred time windows are
+        prioritized. Tasks without a time window appear last within their priority tier.
+
+        Args:
+            tasks: Task list to sort (defaults to self.tasks)
+
+        Returns:
+            Sorted list of tasks (highest priority first, earliest time second)
+        """
+        task_list = tasks if tasks is not None else self.tasks
+        priority_order = {"high": 0, "medium": 1, "low": 2}
+
+        def get_sort_key(task: Task) -> tuple:
+            priority_rank = priority_order.get(task.priority, 3)
+
+            # Extract time for secondary sort within each priority tier
+            if task.preferred_time_window is None:
+                time_in_minutes = float('inf')
+            else:
+                start_time_str = task.preferred_time_window[0]
+                hours, minutes = map(int, start_time_str.split(':'))
+                time_in_minutes = hours * 60 + minutes
+
+            return (priority_rank, time_in_minutes, task.title)
 
         return sorted(task_list, key=get_sort_key)
 
@@ -554,3 +661,42 @@ class ScheduledTask:
     def format_time(self) -> str:
         """Returns formatted time range (e.g., '08:00—08:30')."""
         return f"{self.start_time}—{self.end_time}"
+
+
+def save_to_json(owner: Owner, filepath: str = "data.json") -> None:
+    """
+    Saves the owner, pets, and tasks to a JSON file.
+
+    Converts the Owner object and all its related pets and tasks to a dictionary,
+    then writes to JSON. Uses ISO format for date serialization.
+
+    Args:
+        owner: The Owner object to save
+        filepath: Path where the JSON file will be written (default: "data.json")
+    """
+    with open(filepath, 'w') as f:
+        json.dump(owner.to_dict(), f, indent=2)
+
+
+def load_from_json(filepath: str = "data.json") -> Optional[Owner]:
+    """
+    Loads owner, pets, and tasks from a JSON file.
+
+    Reads a JSON file and reconstructs the Owner object with all related pets
+    and tasks. Handles date deserialization from ISO format strings.
+
+    Args:
+        filepath: Path to the JSON file to load (default: "data.json")
+
+    Returns:
+        The reconstructed Owner object, or None if file doesn't exist or is invalid
+    """
+    try:
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+        return Owner.from_dict(data)
+    except FileNotFoundError:
+        return None
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        print(f"Error loading data from {filepath}: {e}")
+        return None

@@ -9,6 +9,7 @@ A busy pet owner needs help staying consistent with pet care. They want an assis
 - Track pet care tasks (walks, feeding, meds, enrichment, grooming, etc.)
 - Consider constraints (time available, priority, owner preferences)
 - Produce a daily plan and explain why it chose that plan
+- **Remember pets and tasks between sessions** via persistent JSON storage
 
 Your job is to design the system first (UML), then implement the logic in Python, then connect it to the Streamlit UI.
 
@@ -21,6 +22,64 @@ Your final app should:
 - Generate a daily schedule/plan based on constraints and priorities
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
+- **Save and load data between sessions** using JSON persistence
+
+## 💾 Data Persistence
+
+PawPal+ automatically saves your pets, tasks, and preferences to `data.json` whenever you make changes. This file is stored in the project directory and loaded automatically when you restart the app.
+
+### Persistence Workflow
+
+1. **On App Startup**: `load_from_json()` is called to check for existing `data.json`. If found, your previous owner, pets, and tasks are restored.
+2. **On Data Changes**: Whenever you modify the owner info, add a pet, or add a task, `save_to_json()` is called to persist the changes immediately.
+3. **Serialization Strategy**: 
+   - All data is converted to dictionaries using `.to_dict()` methods
+   - Date objects are converted to ISO format strings (`YYYY-MM-DD`) for JSON compatibility
+   - Task references to pets and owner references are preserved through careful reconstruction
+
+### Files Modified for Persistence
+
+| File | Changes | Purpose |
+|------|---------|---------|
+| **pawpal_system.py** | Added `to_dict()` and `from_dict()` methods to `Owner`, `Pet`, and `Task` classes; Added `save_to_json()` and `load_from_json()` module-level functions | Handles JSON serialization/deserialization of complex objects |
+| **app.py** | Added imports for `save_to_json` and `load_from_json`; Added data loading on startup; Added save calls after owner updates, pet additions, and task additions | Integrates persistence with the Streamlit UI |
+
+### How Serialization Works
+
+**Challenge**: Complex objects with circular references (Owner → Pet → Owner, Task → Pet → Owner) can't be directly JSON-serialized.
+
+**Solution**: Custom dictionary conversion with smart reconstruction:
+- `Owner.to_dict()` includes all pets and their tasks
+- When loading, `Owner.from_dict()` reconstructs the owner first, then creates pets and passes the owner reference to maintain the relationship
+- `Task.to_dict()` excludes the pet reference (stored in the parent pet's task list instead)
+- Date objects use Python's built-in `date.isoformat()` for serialization and `date.fromisoformat()` for deserialization
+
+### Example data.json Structure
+
+```json
+{
+  "name": "Jordan",
+  "available_hours_per_day": 4,
+  "preferences": {},
+  "pets": [
+    {
+      "name": "Mochi",
+      "species": "dog",
+      "tasks": [
+        {
+          "title": "Morning walk",
+          "duration_minutes": 30,
+          "priority": "high",
+          "recurring": "daily",
+          "due_date": "2026-06-23",
+          "preferred_time_window": ["07:00", "09:00"],
+          "completed": false
+        }
+      ]
+    }
+  ]
+}
+```
 
 ## Getting started
 
@@ -90,6 +149,174 @@ Remaining time: 125 minutes
 - Clear display of scheduled tasks with times and priorities
 - Reasoning explanation showing why tasks were chosen and how much time remains
 
+### Interactive Comparison: Priority-Only vs Priority-Then-Time
+
+Run `python demo_priority_scheduling.py` to see the three sorting strategies side-by-side:
+
+```
+1. ORIGINAL TASK LIST (unsorted):
+   1. Afternoon Play            (low    priority, 20 min) → ('14:00', '15:00')
+   2. Morning Walk              (high   priority, 45 min) → ('07:00', '08:00')
+   3. Medication                (high   priority, 10 min) → no time window
+   4. Evening Training          (medium priority, 30 min) → ('17:00', '18:00')
+   5. Grooming                  (low    priority, 30 min) → no time window
+   6. Breakfast                 (high   priority, 15 min) → no time window
+   7. Lunch Feeding             (medium priority, 10 min) → no time window
+
+2. SORTED BY PRIORITY ONLY:
+   1. Morning Walk              (high   priority, 45 min) → ('07:00', '08:00')
+   2. Medication                (high   priority, 10 min) → no time window
+   3. Breakfast                 (high   priority, 15 min) → no time window
+   4. Evening Training          (medium priority, 30 min) → ('17:00', '18:00')
+   5. Lunch Feeding             (medium priority, 10 min) → no time window
+   6. Afternoon Play            (low    priority, 20 min) → ('14:00', '15:00')
+   7. Grooming                  (low    priority, 30 min) → no time window
+
+3. SORTED BY TIME ONLY:
+   1. Morning Walk              (high   priority, 45 min) → ('07:00', '08:00')
+   2. Afternoon Play            (low    priority, 20 min) → ('14:00', '15:00')
+   3. Evening Training          (medium priority, 30 min) → ('17:00', '18:00')
+   4. Breakfast                 (high   priority, 15 min) → no time window
+   5. Grooming                  (low    priority, 30 min) → no time window
+   6. Lunch Feeding             (medium priority, 10 min) → no time window
+   7. Medication                (high   priority, 10 min) → no time window
+
+4. SORTED BY PRIORITY → TIME (PawPal+ Algorithm):
+   1. Morning Walk              (high   priority, 45 min) → ('07:00', '08:00')
+   2. Breakfast                 (high   priority, 15 min) → no time window
+   3. Medication                (high   priority, 10 min) → no time window
+   4. Evening Training          (medium priority, 30 min) → ('17:00', '18:00')
+   5. Lunch Feeding             (medium priority, 10 min) → no time window
+   6. Afternoon Play            (low    priority, 20 min) → ('14:00', '15:00')
+   7. Grooming                  (low    priority, 30 min) → no time window
+
+5. GENERATED DAILY SCHEDULE (available: 180 minutes):
+   Schedule for 2026-06-23 for Max (Labrador):
+   07:00—07:45 — Morning Walk (45 min) [high]
+   07:45—08:00 — Breakfast (15 min) [high]
+   08:00—08:10 — Medication (10 min) [high]
+   08:10—08:40 — Evening Training (30 min) [medium]
+   08:40—08:50 — Lunch Feeding (10 min) [medium]
+   08:50—09:10 — Afternoon Play (20 min) [low]
+   09:10—09:40 — Grooming (30 min) [low]
+   Total time: 160 minutes
+```
+
+**Key Observations:**
+- **Priority-only sorting** groups all high-priority tasks together but doesn't respect time windows within the group
+- **Time-only sorting** respects the schedule but allows low-priority tasks to come before critical ones
+- **Priority-then-time sorting** (PawPal+) ensures high-priority tasks are scheduled first, while still respecting time preferences within each priority tier
+
+### Priority-Based Scheduling in Action
+
+PawPal+ uses intelligent **priority-first, time-second sorting** to optimize daily schedules. High-priority tasks are always scheduled before medium or low-priority tasks, and within each priority tier, tasks with earlier preferred time windows are scheduled first.
+
+#### Example 1: High Priority Takes Precedence
+
+**Scenario:** Owner has 3 hours available. Multiple high-priority tasks compete with lower-priority ones.
+
+```
+Task List (unsorted):
+  • Grooming (high priority, 45 min) → preferred window: 14:00–16:00
+  • Play Time (low priority, 20 min) → preferred window: 07:00–08:00
+  • Medication (high priority, 10 min) → no time window
+  • Exercise (medium priority, 30 min) → preferred window: 15:00–16:00
+  • Training (low priority, 30 min) → no time window
+
+Task List (sorted by priority → time):
+  1. Medication (high priority, 10 min) → no time window
+  2. Grooming (high priority, 45 min) → 14:00–16:00
+  3. Exercise (medium priority, 30 min) → 15:00–16:00
+  4. Play Time (low priority, 20 min) → 07:00–08:00
+  5. Training (low priority, 30 min) → no time window
+
+Generated Schedule (available: 180 minutes):
+  07:00—07:10 — Medication (10 min) [high]
+  07:10—07:55 — Grooming (45 min) [high]
+  07:55—08:25 — Exercise (30 min) [medium]
+  08:25—08:45 — Play Time (20 min) [low]
+  
+  Scheduled: 4 tasks (105 minutes)
+  Dropped: Training (30 min, low priority – insufficient time)
+  Remaining: 75 minutes
+```
+
+**Why this schedule works:**
+- All high-priority tasks (Medication, Grooming) are scheduled first, regardless of other tasks
+- Medium-priority Exercise is placed next
+- Low-priority tasks are scheduled only if time permits
+- Play Time gets scheduled because it fits; Training is dropped to make room for higher priorities
+
+#### Example 2: Time Window Ordering Within Priority Level
+
+**Scenario:** Owner has 2.5 hours. Multiple high-priority tasks with different time windows.
+
+```
+Task List (unsorted):
+  • Feeding (high priority, 15 min) → preferred window: 18:00–19:00
+  • Breakfast (high priority, 15 min) → preferred window: 07:00–08:00
+  • Veterinary (high priority, 60 min) → preferred window: 10:00–11:00
+  • Cleaning (high priority, 20 min) → no time window
+
+Task List (sorted by priority → time):
+  1. Cleaning (high priority, 20 min) → no time window
+  2. Breakfast (high priority, 15 min) → 07:00–08:00
+  3. Veterinary (high priority, 60 min) → 10:00–11:00
+  4. Feeding (high priority, 15 min) → 18:00–19:00
+
+Generated Schedule (available: 150 minutes):
+  07:00—07:20 — Cleaning (20 min) [high]
+  07:20—07:35 — Breakfast (15 min) [high]
+  07:35—08:35 — Veterinary (60 min) [high]
+  08:35—08:50 — Feeding (15 min) [high]
+  
+  Scheduled: 4 tasks (110 minutes)
+  Remaining: 40 minutes
+```
+
+**Why this schedule works:**
+- All tasks are high priority, so they're grouped together
+- Within the high-priority tier, tasks without time windows come first (maximum flexibility)
+- Then tasks are ordered by earliest preferred start time (07:00 → 10:00 → 18:00)
+- All high-priority tasks fit because they collectively take 110 minutes
+
+#### Example 3: Mixed Priorities with Limited Time
+
+**Scenario:** Owner has only 90 minutes. Hard choices must be made.
+
+```
+Task List (unsorted):
+  • Walk (high priority, 45 min) → preferred window: 07:00–08:00
+  • Feeding (high priority, 10 min) → no time window
+  • Enrichment (medium priority, 30 min) → preferred window: 14:00–15:00
+  • Play (low priority, 20 min) → preferred window: 10:00–11:00
+  • Grooming (low priority, 30 min) → no time window
+
+Task List (sorted by priority → time):
+  1. Feeding (high priority, 10 min) → no time window
+  2. Walk (high priority, 45 min) → 07:00–08:00
+  3. Enrichment (medium priority, 30 min) → 14:00–15:00
+  4. Play (low priority, 20 min) → 10:00–11:00
+  5. Grooming (low priority, 30 min) → no time window
+
+Generated Schedule (available: 90 minutes):
+  07:00—07:10 — Feeding (10 min) [high]
+  07:10—07:55 — Walk (45 min) [high]
+  07:55—08:25 — Enrichment (30 min) [medium]
+  
+  Scheduled: 3 tasks (85 minutes)
+  Dropped:
+    • Play (20 min, low priority – time exhausted)
+    • Grooming (30 min, low priority – time exhausted)
+  Remaining: 5 minutes
+```
+
+**Why this schedule works:**
+- Critical tasks (Walk, Feeding) are guaranteed slots
+- Medium-priority Enrichment fits
+- Low-priority tasks (Play, Grooming) are dropped when time runs out
+- This ensures the owner focuses on what matters most
+
 ## 🧪 Testing PawPal+
 
 The test suite verifies the three core scheduling behaviors with comprehensive edge case coverage.
@@ -153,6 +380,90 @@ tests/test_pawpal.py::TestConflictDetection::test_conflict_at_exact_boundary PAS
 
 The system is reliable and production-ready for the core scheduling behaviors.
 
+## 🎨 User-Friendly Output Formatting
+
+PawPal+ includes enhanced visual formatting to make output more readable and engaging with color-coded indicators, emojis, and structured CLI tables.
+
+### Formatting Features
+
+| Feature | Implementation | Where Used |
+|---------|-----------------|------------|
+| **Priority Indicators** | 🔴 HIGH (red), 🟡 MEDIUM (yellow), 🟢 LOW (green) using `format_priority_indicator()` | Task lists, schedule display |
+| **Status Badges** | ✅ COMPLETED, ⏳ PENDING, 📌 SCHEDULED using `format_status_badge()` | Task status column |
+| **Task Type Emojis** | 🚶 walk, 🍽️ feed, 🎾 play, ✂️ groom, 💊 vet, etc. via `get_task_emoji()` | Task titles in tables |
+| **Species Emojis** | 🐕 dog, 🐈 cat, 🐰 rabbit, 🦜 bird, etc. via `get_species_emoji()` | Pet names and summaries |
+| **Structured Tables** | Using `tabulate` library with multiple table formats (grid, fancy_grid, rounded_grid) | Task lists, schedules, pet summaries |
+| **Summary Statistics** | Formatted stats with visual bars and percentages via `format_summary_stats()` | Schedule overview |
+| **Conflict Messages** | Formatted warnings with emojis and clear layout via `format_conflict_warning()` | Time conflict alerts |
+
+### Formatting Utilities Module
+
+**File: `formatting_utils.py`**
+
+Provides a suite of formatting functions for consistent UI output:
+
+#### Main Functions
+
+- `format_priority_indicator(priority: str) -> str`  
+  Returns a colored priority badge with emoji (e.g., "🔴 HIGH")
+
+- `format_status_badge(status: str) -> str`  
+  Returns a status badge with emoji (e.g., "✅ COMPLETED")
+
+- `get_task_emoji(task_title: str) -> str`  
+  Infers task type from title and returns matching emoji
+
+- `get_species_emoji(species: str) -> str`  
+  Returns emoji for a pet species (dog → 🐕, cat → 🐈, etc.)
+
+- `format_task_list_table(tasks: List[Dict], use_color: bool = True) -> str`  
+  Formats a task list as a structured grid table with emojis and colors
+
+- `format_schedule_table(scheduled_tasks: List[Dict]) -> str`  
+  Formats a daily schedule as a fancy grid table with time slots
+
+- `format_pet_summary_table(pets: List[Dict]) -> str`  
+  Formats pet list with task counts as a rounded grid table
+
+- `format_summary_stats(total_tasks, completed_tasks, dropped_tasks, used_minutes, available_minutes) -> str`  
+  Returns formatted statistics with completion rates and time utilization
+
+#### Support Functions
+
+- `format_success_message(message: str) -> str` - Adds ✅ prefix
+- `format_warning_message(message: str) -> str` - Adds ⚠️ prefix
+- `format_info_message(message: str) -> str` - Adds ℹ️ prefix
+- `format_error_message(message: str) -> str` - Adds ❌ prefix
+
+#### Color Mapping
+
+- **High Priority**: `\033[91m` (bright red)
+- **Medium Priority**: `\033[93m` (bright yellow)
+- **Low Priority**: `\033[92m` (bright green)
+- **Reset**: `\033[0m` (clear formatting)
+
+### Libraries Used
+
+- **`tabulate`**: Generates formatted ASCII tables with multiple style options (grid, fancy_grid, rounded_grid, etc.)
+  - Install: `pip install tabulate`
+  - Provides professional, easy-to-read table layouts for CLI and Streamlit output
+
+### Examples
+
+#### Before (Plain Text)
+```
+Status: pending | Pet: Mochi | Task: Morning walk | Duration: 30 min | Priority: high
+```
+
+#### After (With Formatting)
+```
+┏━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━┓
+┃ Status     ┃ Pet    ┃ Task          ┃ Duration ┃ Priority     ┃ Time    ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━┩
+│ ⏳ PENDING  │ 🐕 Mochi│ 🚶 Morning walk │ 30 min  │ 🔴 HIGH     │ Flexible│
+└─────────────┴────────┴─────────────────┴─────────┴──────────────┴─────────┘
+```
+
 ## ✨ Features
 
 PawPal+ implements intelligent scheduling algorithms that optimize pet care task allocation based on owner availability, task priority, and time constraints.
@@ -161,6 +472,7 @@ PawPal+ implements intelligent scheduling algorithms that optimize pet care task
 
 | Feature | Method(s) | What It Does |
 |---------|-----------|-------------|
+| **Priority-Based Scheduling** | `Scheduler.sort_tasks_by_priority_then_time()` | **Primary scheduling algorithm.** Sorts tasks by priority level (high → medium → low), then by preferred time window within each tier. Ensures critical tasks are always scheduled before lower-priority ones, while respecting time preferences. This is the core algorithm used in `generate_schedule()`. |
 | **Sorting by Time** | `Scheduler.sort_tasks_by_time()` | Arranges tasks chronologically by preferred start time (earliest first). Tasks without assigned time windows appear last, allowing unscheduled flexibility. |
 | **Sorting by Priority** | `Scheduler.sort_tasks_by_priority()` | Ranks tasks by importance: high → medium → low. Critical tasks are scheduled first when time is limited. |
 | **Status Filtering** | `Scheduler.filter_tasks_by_status()` | Separates pending and completed tasks. Lets you view just active tasks or archived completed ones. |
