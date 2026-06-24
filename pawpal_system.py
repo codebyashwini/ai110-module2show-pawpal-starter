@@ -117,6 +117,96 @@ class Scheduler:
         priority_order = {"high": 0, "medium": 1, "low": 2}
         return sorted(task_list, key=lambda t: priority_order.get(t.priority, 3))
 
+    def sort_tasks_by_time(self, tasks: Optional[List[Task]] = None) -> List[Task]:
+        """
+        Returns tasks sorted by preferred time window (earliest first).
+        Tasks without a time window appear last.
+        Uses lambda to parse 'HH:MM' format strings into comparable integers.
+        """
+        task_list = tasks if tasks is not None else self.tasks
+
+        def get_sort_key(task: Task) -> tuple:
+            # If task has no preferred_time_window, push it to the end (infinity)
+            if task.preferred_time_window is None:
+                return (float('inf'), task.title)
+
+            # Parse 'HH:MM' from the window start time into minutes since midnight
+            start_time_str = task.preferred_time_window[0]
+            hours, minutes = map(int, start_time_str.split(':'))
+            time_in_minutes = hours * 60 + minutes
+
+            return (time_in_minutes, task.title)
+
+        return sorted(task_list, key=get_sort_key)
+
+    def filter_tasks_by_status(
+        self,
+        tasks: Optional[List[Task]] = None,
+        status: str = "pending"
+    ) -> List[Task]:
+        """
+        Filters tasks by completion status.
+
+        Args:
+            tasks: Task list to filter (defaults to self.tasks)
+            status: 'pending' for incomplete, 'completed' for done
+
+        Returns:
+            Filtered list of tasks
+        """
+        task_list = tasks if tasks is not None else self.tasks
+
+        if status == "completed":
+            return [t for t in task_list if t.completed]
+        elif status == "pending":
+            return [t for t in task_list if not t.completed]
+        else:
+            return task_list
+
+    def filter_tasks_by_pet(
+        self,
+        pet: Pet,
+        tasks: Optional[List[Task]] = None
+    ) -> List[Task]:
+        """
+        Filters tasks by pet ownership.
+
+        Args:
+            pet: Pet to filter by
+            tasks: Task list to filter (defaults to self.tasks)
+
+        Returns:
+            List of tasks for the given pet
+        """
+        task_list = tasks if tasks is not None else self.tasks
+        return [t for t in task_list if t.pet == pet]
+
+    def filter_tasks_by_status_and_pet(
+        self,
+        pet: Pet,
+        status: str = "pending",
+        tasks: Optional[List[Task]] = None
+    ) -> List[Task]:
+        """
+        Filters tasks by both pet and completion status.
+
+        Args:
+            pet: Pet to filter by
+            status: 'pending' or 'completed'
+            tasks: Task list to filter (defaults to self.tasks)
+
+        Returns:
+            Filtered list of tasks matching both criteria
+        """
+        task_list = tasks if tasks is not None else self.tasks
+
+        if status == "completed":
+            return [t for t in task_list if t.pet == pet and t.completed]
+        elif status == "pending":
+            return [t for t in task_list if t.pet == pet and not t.completed]
+        else:
+            return [t for t in task_list if t.pet == pet]
+
     def fit_tasks_in_time(self, tasks: List[Task], available_minutes: int) -> tuple:
         """Returns (scheduled_tasks, dropped_tasks) where scheduled fit in available time.
         Low-priority tasks are dropped first if needed."""

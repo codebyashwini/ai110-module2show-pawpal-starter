@@ -1,15 +1,65 @@
 classDiagram
-    %% Replace the placeholders below with your actual classes, attributes, methods, and relationships.
-    %% Keep this file updated so it matches your final implementation.
+    %% PawPal+ UML Class Diagram
+    %% Classes for managing pets, tasks, and scheduling
 
-    class ClassName {
-        +type attribute
-        +method() returnType
+    class Owner {
+        +string name
+        +int available_hours_per_day
+        +dict preferences
+        +get_available_hours() int
+        +set_preferences(dict) void
     }
 
-    class AnotherClass {
-        +type attribute
-        +method() returnType
+    class Pet {
+        +string name
+        +string species
+        +Owner owner
+        +get_owner() Owner
+        +display_info() string
     }
 
-    ClassName --> AnotherClass : relationship
+    class Task {
+        +string title
+        +int duration_minutes
+        +string priority
+        +string recurring
+        +get_duration() int
+        +get_priority() string
+    }
+
+    class Scheduler {
+        +Owner owner
+        +Pet pet
+        +Task[] tasks
+        +generate_schedule() DailySchedule
+        +sort_tasks_by_priority() Task[]
+        +fit_tasks_in_time(Task[], int) Task[]
+    }
+
+    class DailySchedule {
+        +date date
+        +Pet pet
+        +ScheduledTask[] scheduled_tasks
+        +get_total_duration() int
+        +display_plan() string
+        +explain_reasoning() string
+    }
+
+    class ScheduledTask {
+        +Task task
+        +string start_time
+        +string end_time
+        +string explanation
+        +get_duration() int
+        +format_time() string
+    }
+
+    %% Relationships
+    Owner "1" --> "*" Pet : owns
+    Pet "1" --> "*" Task : needs_care
+    Scheduler "1" --> "1" Owner : plans_for
+    Scheduler "1" --> "1" Pet : plans_for
+    Scheduler "1" --> "*" Task : consumes
+    Scheduler "1" --> "1" DailySchedule : generates
+    DailySchedule "1" --> "*" ScheduledTask : contains
+    ScheduledTask "1" --> "1" Task : wraps

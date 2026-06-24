@@ -44,15 +44,51 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Run `python main.py` to see a sample daily schedule generated from the PawPal+ logic:
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+Created owner: Alice with 4 hours available per day
+
+Created pets: Mochi (Golden Retriever), Whiskers (Tabby Cat)
+
+============================================================
+TODAY'S SCHEDULE
+============================================================
+
+Schedule for 2026-06-23 for Mochi (Golden Retriever):
+  07:00—07:45 — Morning Walk (45 min) [high]
+  07:45—08:00 — Breakfast (15 min) [high]
+  08:00—08:10 — Feeding (10 min) [high]
+  08:10—08:40 — Training Session (30 min) [medium]
+  08:40—08:55 — Litter Box Cleaning (15 min) [medium]
+Total time: 115 minutes
+
+Reasoning for 2026-06-23:
+Owner availability: 4 hours (240 minutes)
+Scheduled time: 115 minutes
+Remaining time: 125 minutes
+
+✓ Scheduled tasks:
+  • Morning Walk (high priority, 45 min)
+    Preferred window: ('07:00', '09:00')
+  • Breakfast (high priority, 15 min)
+  • Feeding (high priority, 10 min)
+  • Training Session (medium priority, 30 min)
+    Preferred window: ('15:00', '17:00')
+  • Litter Box Cleaning (medium priority, 15 min)
+
+✓ All tasks fit in available time!
+
+============================================================
 ```
+
+**What this demonstrates:**
+- Owner creation with available hours per day
+- Multiple pets added to an owner
+- Tasks with varying priorities and time windows
+- Automatic scheduling respecting constraints
+- Clear display of scheduled tasks with times and priorities
+- Reasoning explanation showing why tasks were chosen and how much time remains
 
 ## 🧪 Testing PawPal+
 
