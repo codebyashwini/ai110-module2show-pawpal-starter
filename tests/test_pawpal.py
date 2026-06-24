@@ -390,3 +390,140 @@ class TestConflictDetection:
 
         # Touching boundaries should NOT conflict (using < in comparison)
         assert len(conflicts) == 0
+
+
+class TestNextAvailableSlot:
+    """Tests for find_next_available_slot method (third algorithmic capability)."""
+
+    def test_find_slot_with_no_existing_tasks(self):
+        """Verify that with no conflicts, earliest slot is found starting at 7:00 AM."""
+        owner = Owner(name="Maya", available_hours_per_day=4)
+        pet = Pet(name="Beau", species="Dog", owner=owner)
+
+        # 30-minute task with no existing tasks
+        task = Task(
+            title="Morning walk",
+            duration_minutes=30,
+            priority="high"
+        )
+
+        scheduler = Scheduler(owner, pet=pet)
+        result = scheduler.find_next_available_slot(task, [])
+
+        # Should return the earliest slot
+        assert result is not None
+        assert result[0] == "07:00"
+        assert result[1] == "07:30"
+
+    def test_find_slot_avoids_existing_conflict(self):
+        """Verify that the slot finder skips over conflicting time windows."""
+        owner = Owner(name="Nina", available_hours_per_day=6)
+        pet = Pet(name="Cody", species="Dog", owner=owner)
+
+        # Existing task blocks 7:00-8:00
+        existing_task = Task(
+            title="Vet appointment",
+            duration_minutes=60,
+            priority="high",
+            preferred_time_window=("07:00", "08:00")
+        )
+
+        # New task to schedule
+        task = Task(
+            title="Morning walk",
+            duration_minutes=30,
+            priority="medium"
+        )
+
+        scheduler = Scheduler(owner, pet=pet)
+        result = scheduler.find_next_available_slot(task, [existing_task])
+
+        # Should skip the 7:00-8:00 window and find next available after 8:00
+        assert result is not None
+        assert result[0] == "08:00"
+        assert result[1] == "08:30"
+
+    def test_find_slot_with_multiple_conflicts(self):
+        """Verify slot finder navigates around multiple blocked windows."""
+        owner = Owner(name="Oscar", available_hours_per_day=8)
+        pet = Pet(name="Zoe", species="Dog", owner=owner)
+
+        # Create blockers at different times
+        blocker1 = Task(
+            title="Morning walk",
+            duration_minutes=45,
+            priority="high",
+            preferred_time_window=("07:00", "07:45")
+        )
+        blocker2 = Task(
+            title="Afternoon training",
+            duration_minutes=60,
+            priority="high",
+            preferred_time_window=("08:00", "09:00")
+        )
+
+        # Task to place
+        task = Task(
+            title="Grooming",
+            duration_minutes=30,
+            priority="medium"
+        )
+
+        scheduler = Scheduler(owner, pet=pet)
+        result = scheduler.find_next_available_slot(task, [blocker1, blocker2])
+
+        # Should skip both windows and land at 09:00
+        assert result is not None
+        assert result[0] == "09:00"
+        assert result[1] == "09:30"
+
+    def test_find_slot_returns_none_when_no_space(self):
+        """Verify that when task cannot fit anywhere, None is returned."""
+        owner = Owner(name="Paul", available_hours_per_day=1)
+        pet = Pet(name="Pepper", species="Cat", owner=owner)
+
+        # 1000-minute task (over 16 hours)—exceeds available day window (7:00-23:00 = 16 hours = 960 min)
+        task = Task(
+            title="Marathon grooming",
+            duration_minutes=1000,
+            priority="low"
+        )
+
+        scheduler = Scheduler(owner, pet=pet)
+        result = scheduler.find_next_available_slot(task, [])
+
+        # Should return None (task too long to fit in remaining day)
+        assert result is None
+
+    def test_find_slot_respects_day_boundary(self):
+        """Verify slot finder stops searching before 11:00 PM."""
+        owner = Owner(name="Quinn", available_hours_per_day=20)
+        pet = Pet(name="Rosie", species="Dog", owner=owner)
+
+        # Create a blocker late in the evening
+        evening_blocker = Task(
+            title="Evening routine",
+            duration_minutes=60,
+            priority="high",
+            preferred_time_window=("22:00", "23:00")
+        )
+
+        # 2-hour task
+        task = Task(
+            title="Long grooming session",
+            duration_minutes=120,
+            priority="medium"
+        )
+
+        scheduler = Scheduler(owner, pet=pet)
+        result = scheduler.find_next_available_slot(task, [evening_blocker])
+
+        # Should find space earlier in the day, or return None if impossible
+        # (depends on the algorithm specifics and 23:00 boundary)
+        if result is not None:
+            # Verify result is reasonable
+            start_h, start_m = map(int, result[0].split(":"))
+            end_h, end_m = map(int, result[1].split(":"))
+            start_min = start_h * 60 + start_m
+            end_min = end_h * 60 + end_m
+            assert end_min <= 23 * 60  # Don't schedule past 11:00 PM

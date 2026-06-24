@@ -293,6 +293,69 @@ class Scheduler:
 
         return (scheduled, dropped)
 
+    def find_next_available_slot(self, task: Task, tasks: Optional[List[Task]] = None) -> Optional[tuple]:
+        """
+        Finds the next available time slot for a task that avoids conflicts.
+
+        Scans through the day in 15-minute intervals starting at 7:00 AM,
+        checking if the proposed task duration can fit without overlapping
+        any existing tasks' preferred time windows. Returns the first available
+        (start_time, end_time) tuple or None if no slot found before 11:00 PM.
+
+        This algorithm is useful for:
+        - Finding flexible scheduling options for tasks without fixed windows
+        - Proposing alternative times when a preferred window has conflicts
+        - Checking feasibility when time gaps are fragmented
+
+        Args:
+            task: Task object to find a slot for
+            tasks: List of existing tasks to check for conflicts (defaults to self.tasks)
+
+        Returns:
+            Tuple of (start_time_str, end_time_str) if slot found, None otherwise
+        """
+        task_list = tasks if tasks is not None else self.tasks
+        duration = task.duration_minutes
+
+        # Scan the day in 15-minute intervals from 7:00 AM to 11:00 PM
+        start_hour = 7
+        start_minute = 0
+        end_hour = 23
+        end_minute = 0
+
+        current_minutes = start_hour * 60 + start_minute
+        max_minutes = end_hour * 60 + end_minute
+
+        while current_minutes + duration <= max_minutes:
+            # Convert minutes to HH:MM format
+            hours = current_minutes // 60
+            minutes = current_minutes % 60
+            test_start = f"{hours:02d}:{minutes:02d}"
+
+            # Calculate end time
+            end_minutes = current_minutes + duration
+            end_hours = end_minutes // 60
+            end_mins = end_minutes % 60
+            test_end = f"{end_hours:02d}:{end_mins:02d}"
+
+            test_window = (test_start, test_end)
+
+            # Check if this window conflicts with any existing task
+            has_conflict = False
+            for existing_task in task_list:
+                if existing_task.preferred_time_window:
+                    if self._times_overlap(test_window, existing_task.preferred_time_window):
+                        has_conflict = True
+                        break
+
+            if not has_conflict:
+                return (test_start, test_end)
+
+            # Move forward by 15 minutes
+            current_minutes += 15
+
+        return None
+
     def _time_to_minutes(self, time_str: str) -> int:
         """Converts time string 'HH:MM' to minutes since midnight."""
         hours, minutes = map(int, time_str.split(':'))

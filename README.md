@@ -169,6 +169,7 @@ PawPal+ implements intelligent scheduling algorithms that optimize pet care task
 | **Time Conflict Detection** | `Scheduler.detect_time_conflicts()` | Identifies overlapping time windows across all tasks (including cross-pet conflicts). Issues warnings without blocking, so you can proceed while being aware of conflicts. |
 | **Greedy Time-Based Scheduling** | `Scheduler.fit_tasks_in_time()` | Schedules tasks within the owner's available time budget. Processes pre-sorted lists (by priority) to fit high-priority tasks first; drops remaining tasks if time runs out. |
 | **Automatic Recurring Task Creation** | `Scheduler.mark_task_complete()` | When you complete a task, the system auto-generates the next occurrence (for daily/weekly tasks) with identical settings. One-time tasks do not recur. |
+| **Next Available Slot Finding** | `Scheduler.find_next_available_slot()` | Scans the day in 15-minute intervals to find the earliest available time slot for a task that doesn't conflict with existing scheduled windows. Returns (start_time, end_time) or None if task cannot fit. Useful for flexible scheduling and conflict resolution. |
 
 ## 📸 Demo Walkthrough
 
