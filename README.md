@@ -108,14 +108,18 @@ Sample test output:
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+Intelligent scheduling algorithms that optimize pet care task allocation based on owner availability, task priority, and time constraints.
 
-| Feature | Method(s) | Notes |
-|---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Feature | Method(s) | Description |
+|---------|-----------|-------------|
+| **Sorting by time** | `Scheduler.sort_tasks_by_time()` | Orders tasks by preferred start time (earliest first). Tasks without time windows appear last. Uses HH:MM parsing for chronological order. |
+| **Sorting by priority** | `Scheduler.sort_tasks_by_priority()` | Orders tasks by importance: high → medium → low. Used to ensure critical tasks are scheduled first when time is limited. |
+| **Filtering by status** | `Scheduler.filter_tasks_by_status()` | Separates pending and completed tasks. Enables distinction between active and archived work. |
+| **Filtering by pet** | `Scheduler.filter_tasks_by_pet()` | Returns all tasks for a specific pet. Allows per-pet schedule views and per-pet planning. |
+| **Filtering by status + pet** | `Scheduler.filter_tasks_by_status_and_pet()` | Combines status and pet filters. Enables queries like "pending tasks for Mochi" with a single call. |
+| **Conflict detection** | `Scheduler.detect_time_conflicts()` | Identifies overlapping time windows across tasks (including cross-pet conflicts). Returns warning messages rather than exceptions, allowing scheduling to proceed while alerting the user. |
+| **Time fitting** | `Scheduler.fit_tasks_in_time()` | Greedily schedules tasks within available time budget. Works with pre-sorted task lists to ensure high-priority tasks are scheduled first; remaining tasks are dropped. |
+| **Recurring task creation** | `Scheduler.mark_task_complete()` | Marks a task complete and auto-creates the next occurrence (daily/weekly) with the same parameters and due date. One-time tasks do not generate new instances. |
 
 ## 📸 Demo Walkthrough
 

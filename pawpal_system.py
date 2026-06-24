@@ -6,6 +6,7 @@ Classes for managing pets, owners, tasks, and scheduling.
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional
+from itertools import combinations
 
 
 class Owner:
@@ -113,7 +114,19 @@ class Scheduler:
                            self.owner, scheduled_task_objs, dropped_tasks)
 
     def sort_tasks_by_priority(self, tasks: Optional[List[Task]] = None) -> List[Task]:
-        """Returns tasks sorted by priority (high → medium → low)."""
+        """
+        Sort tasks by priority level in descending order of importance.
+
+        Sorts tasks into high → medium → low priority, preserving relative order
+        within each priority tier (stable sort). Used by generate_schedule to
+        prioritize critical tasks when available time is limited.
+
+        Args:
+            tasks: Task list to sort (defaults to self.tasks)
+
+        Returns:
+            Sorted list of tasks (highest priority first)
+        """
         task_list = tasks if tasks is not None else self.tasks
         priority_order = {"high": 0, "medium": 1, "low": 2}
         return sorted(task_list, key=lambda t: priority_order.get(t.priority, 3))
@@ -252,8 +265,21 @@ class Scheduler:
         return next_task
 
     def fit_tasks_in_time(self, tasks: List[Task], available_minutes: int) -> tuple:
-        """Returns (scheduled_tasks, dropped_tasks) where scheduled fit in available time.
-        Low-priority tasks are dropped first if needed."""
+        """
+        Greedily fit tasks into available time, dropping tasks that don't fit.
+
+        Iterates through tasks in order and schedules each one if it fits within
+        the available time budget. Tasks that exceed remaining time are dropped.
+        Caller should pre-sort tasks by priority to ensure critical tasks are
+        scheduled first.
+
+        Args:
+            tasks: Task list to fit (expected to be pre-sorted by priority)
+            available_minutes: Total minutes available in the day
+
+        Returns:
+            Tuple of (scheduled_tasks, dropped_tasks) lists
+        """
         scheduled = []
         dropped = []
         used_minutes = 0
@@ -266,6 +292,93 @@ class Scheduler:
                 dropped.append(task)
 
         return (scheduled, dropped)
+
+    def _time_to_minutes(self, time_str: str) -> int:
+        """Converts time string 'HH:MM' to minutes since midnight."""
+        hours, minutes = map(int, time_str.split(':'))
+        return hours * 60 + minutes
+
+    def _get_pet_name(self, task: Task) -> str:
+        """Get pet name, with fallback for missing pets."""
+        return task.pet.name if task.pet else "Unknown Pet"
+
+    def _times_overlap(self, window1: tuple, window2: tuple) -> bool:
+        """
+        Check if two time windows overlap.
+
+        Args:
+            window1: Tuple of (start_time_str, end_time_str) e.g., ("07:00", "08:00")
+            window2: Tuple of (start_time_str, end_time_str)
+
+        Returns:
+            True if windows overlap, False otherwise
+        """
+        start1, end1 = window1
+        start2, end2 = window2
+
+        start1_min = self._time_to_minutes(start1)
+        end1_min = self._time_to_minutes(end1)
+        start2_min = self._time_to_minutes(start2)
+        end2_min = self._time_to_minutes(end2)
+
+        return start1_min < end2_min and start2_min < end1_min
+
+    def _tasks_have_conflicting_times(self, task1: Task, task2: Task) -> bool:
+        """
+        Check if two tasks have overlapping preferred time windows.
+
+        Both tasks must have time windows defined to be considered for conflict.
+        Returns False if either task lacks a preferred_time_window.
+
+        Args:
+            task1: First task to compare
+            task2: Second task to compare
+
+        Returns:
+            True if both tasks have time windows and they overlap, False otherwise
+        """
+        return (
+            task1.preferred_time_window and
+            task2.preferred_time_window and
+            self._times_overlap(task1.preferred_time_window, task2.preferred_time_window)
+        )
+
+    def _format_conflict_warning(self, task1: Task, task2: Task) -> str:
+        """Format a conflict warning message."""
+        pet1_name = self._get_pet_name(task1)
+        pet2_name = self._get_pet_name(task2)
+        start1, end1 = task1.preferred_time_window
+        start2, end2 = task2.preferred_time_window
+
+        return (
+            f"⚠️  TIME CONFLICT: '{task1.title}' ({pet1_name}) "
+            f"[{start1}–{end1}] "
+            f"overlaps with '{task2.title}' ({pet2_name}) "
+            f"[{start2}–{end2}]"
+        )
+
+    def detect_time_conflicts(self, tasks: Optional[List[Task]] = None) -> List[str]:
+        """
+        Detect if any two tasks have overlapping preferred time windows.
+
+        Returns a list of warning messages rather than raising exceptions.
+        This is a lightweight conflict detection strategy that allows
+        scheduling to proceed while alerting the user to conflicts.
+
+        Args:
+            tasks: Task list to check (defaults to self.tasks)
+
+        Returns:
+            List of warning strings describing conflicts
+        """
+        task_list = tasks if tasks is not None else self.tasks
+        warnings = []
+
+        for task1, task2 in combinations(task_list, 2):
+            if self._tasks_have_conflicting_times(task1, task2):
+                warnings.append(self._format_conflict_warning(task1, task2))
+
+        return warnings
 
     def _create_scheduled_tasks(self, tasks: List[Task], target_date: date) -> List['ScheduledTask']:
         """Converts Task objects to ScheduledTask objects with time slots."""
