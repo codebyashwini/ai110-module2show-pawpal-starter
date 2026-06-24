@@ -4,7 +4,7 @@ Classes for managing pets, owners, tasks, and scheduling.
 """
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional
 
 
@@ -68,6 +68,7 @@ class Task:
     priority: str  # low, medium, high
     pet: Optional['Pet'] = None  # which pet this task is for
     recurring: str = "one-time"  # daily, weekly, one-time
+    due_date: Optional[date] = None  # when this task is due
     preferred_time_window: Optional[tuple] = None  # e.g., ("07:00", "09:00") for time-specific tasks
     completed: bool = False
 
@@ -206,6 +207,49 @@ class Scheduler:
             return [t for t in task_list if t.pet == pet and not t.completed]
         else:
             return [t for t in task_list if t.pet == pet]
+
+    def mark_task_complete(self, task: Task) -> Optional[Task]:
+        """
+        Marks a task as complete and creates a new instance for the next occurrence if recurring.
+
+        Args:
+            task: The task to mark complete
+
+        Returns:
+            The newly created task if recurring, None otherwise
+        """
+        task.mark_complete()
+
+        if task.recurring == "one-time":
+            return None
+
+        if not task.pet or not task.due_date:
+            return None
+
+        # Calculate next due date based on recurring frequency
+        if task.recurring == "daily":
+            next_due_date = task.due_date + timedelta(days=1)
+        elif task.recurring == "weekly":
+            next_due_date = task.due_date + timedelta(weeks=1)
+        else:
+            return None
+
+        # Create a new task instance for the next occurrence
+        next_task = Task(
+            title=task.title,
+            duration_minutes=task.duration_minutes,
+            priority=task.priority,
+            pet=task.pet,
+            recurring=task.recurring,
+            due_date=next_due_date,
+            preferred_time_window=task.preferred_time_window,
+            completed=False
+        )
+
+        # Add the new task to the pet's task list
+        task.pet.add_task(next_task)
+
+        return next_task
 
     def fit_tasks_in_time(self, tasks: List[Task], available_minutes: int) -> tuple:
         """Returns (scheduled_tasks, dropped_tasks) where scheduled fit in available time.
