@@ -153,29 +153,187 @@ tests/test_pawpal.py::TestConflictDetection::test_conflict_at_exact_boundary PAS
 
 The system is reliable and production-ready for the core scheduling behaviors.
 
-## 📐 Smarter Scheduling
+## ✨ Features
 
-Intelligent scheduling algorithms that optimize pet care task allocation based on owner availability, task priority, and time constraints.
+PawPal+ implements intelligent scheduling algorithms that optimize pet care task allocation based on owner availability, task priority, and time constraints.
 
-| Feature | Method(s) | Description |
+### Core Scheduling Algorithms
+
+| Feature | Method(s) | What It Does |
 |---------|-----------|-------------|
-| **Sorting by time** | `Scheduler.sort_tasks_by_time()` | Orders tasks by preferred start time (earliest first). Tasks without time windows appear last. Uses HH:MM parsing for chronological order. |
-| **Sorting by priority** | `Scheduler.sort_tasks_by_priority()` | Orders tasks by importance: high → medium → low. Used to ensure critical tasks are scheduled first when time is limited. |
-| **Filtering by status** | `Scheduler.filter_tasks_by_status()` | Separates pending and completed tasks. Enables distinction between active and archived work. |
-| **Filtering by pet** | `Scheduler.filter_tasks_by_pet()` | Returns all tasks for a specific pet. Allows per-pet schedule views and per-pet planning. |
-| **Filtering by status + pet** | `Scheduler.filter_tasks_by_status_and_pet()` | Combines status and pet filters. Enables queries like "pending tasks for Mochi" with a single call. |
-| **Conflict detection** | `Scheduler.detect_time_conflicts()` | Identifies overlapping time windows across tasks (including cross-pet conflicts). Returns warning messages rather than exceptions, allowing scheduling to proceed while alerting the user. |
-| **Time fitting** | `Scheduler.fit_tasks_in_time()` | Greedily schedules tasks within available time budget. Works with pre-sorted task lists to ensure high-priority tasks are scheduled first; remaining tasks are dropped. |
-| **Recurring task creation** | `Scheduler.mark_task_complete()` | Marks a task complete and auto-creates the next occurrence (daily/weekly) with the same parameters and due date. One-time tasks do not generate new instances. |
+| **Sorting by Time** | `Scheduler.sort_tasks_by_time()` | Arranges tasks chronologically by preferred start time (earliest first). Tasks without assigned time windows appear last, allowing unscheduled flexibility. |
+| **Sorting by Priority** | `Scheduler.sort_tasks_by_priority()` | Ranks tasks by importance: high → medium → low. Critical tasks are scheduled first when time is limited. |
+| **Status Filtering** | `Scheduler.filter_tasks_by_status()` | Separates pending and completed tasks. Lets you view just active tasks or archived completed ones. |
+| **Pet-Based Filtering** | `Scheduler.filter_tasks_by_pet()` | Shows all tasks for a specific pet. Enables per-pet schedule views and individual pet planning. |
+| **Combined Status & Pet Filtering** | `Scheduler.filter_tasks_by_status_and_pet()` | Filters by both pet and status in a single call (e.g., "pending tasks for Mochi"). Reduces redundant queries. |
+| **Time Conflict Detection** | `Scheduler.detect_time_conflicts()` | Identifies overlapping time windows across all tasks (including cross-pet conflicts). Issues warnings without blocking, so you can proceed while being aware of conflicts. |
+| **Greedy Time-Based Scheduling** | `Scheduler.fit_tasks_in_time()` | Schedules tasks within the owner's available time budget. Processes pre-sorted lists (by priority) to fit high-priority tasks first; drops remaining tasks if time runs out. |
+| **Automatic Recurring Task Creation** | `Scheduler.mark_task_complete()` | When you complete a task, the system auto-generates the next occurrence (for daily/weekly tasks) with identical settings. One-time tasks do not recur. |
 
 ## 📸 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+### Interactive UI Workflow (Streamlit App)
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+The PawPal+ app provides an intuitive interface for managing pet care schedules:
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+1. **Owner & Pet Setup**
+   - Set the owner's name and available hours per day (how much time they can dedicate to pet care)
+   - Add pets (dogs, cats, rabbits, birds, etc.) to the owner's care list
+   - View a summary of all registered pets
+
+2. **Task Management**
+   - For each pet, create care tasks with:
+     - Task title (e.g., "Morning Walk," "Feeding")
+     - Duration in minutes
+     - Priority level (low, medium, high)
+     - Optional: preferred time window (e.g., 7:00–9:00 AM)
+     - Recurrence type (one-time, daily, weekly)
+   - Filter tasks by status (All, Pending, Completed)
+   - Sort tasks by priority or time window
+
+3. **Conflict Detection**
+   - The app automatically flags overlapping time windows across all tasks
+   - For example: if both "Training Session" (3:00–5:00 PM) and "Play Time" (2:00–4:00 PM) are scheduled, you'll see a warning
+   - Conflicts are informational; scheduling continues so you can decide how to resolve them
+
+4. **Generate Daily Schedule**
+   - Click "Generate schedule for today"
+   - The scheduler ranks tasks by priority and fits them into available time
+   - Shows which tasks are scheduled and what time they start
+   - If not all tasks fit, lists dropped tasks with a suggestion to reschedule them
+
+5. **View Detailed Reasoning**
+   - Expands to show:
+     - Total owner availability (in hours and minutes)
+     - Time allocated to scheduled tasks
+     - Remaining available time
+     - Which tasks were included and why
+     - Which tasks couldn't fit and why
+
+### Command-Line Demo
+
+Run `python main.py` to see all features in action:
+
+```
+Created owner: Alice with 4 hours available per day
+
+Created pets: Mochi (Golden Retriever), Whiskers (Tabby Cat)
+
+
+============================================================
+CONFLICT DETECTION
+============================================================
+
+⚠️  Found 6 time conflict(s):
+
+  ⚠️  TIME CONFLICT: 'Training Session' (Mochi) [15:00–17:00] overlaps with 'Grooming Session' (Mochi) [15:30–16:30]
+  ⚠️  TIME CONFLICT: 'Training Session' (Mochi) [15:00–17:00] overlaps with 'Play Time' (Whiskers) [14:00–16:00]
+  ⚠️  TIME CONFLICT: 'Grooming Session' (Mochi) [15:30–16:30] overlaps with 'Veterinary Appointment' (Whiskers) [15:30–16:30]
+  ⚠️  TIME CONFLICT: 'Play Time' (Whiskers) [14:00–16:00] overlaps with 'Veterinary Appointment' (Whiskers) [15:30–16:30]
+
+============================================================
+TEST 1: SORT BY TIME
+============================================================
+
+Tasks sorted by time (earliest first):
+  1. Morning Walk (Mochi) - ('07:00', '09:00')
+  2. Play Time (Whiskers) - ('14:00', '16:00')
+  3. Training Session (Mochi) - ('15:00', '17:00')
+  4. Grooming Session (Mochi) - ('15:30', '16:30')
+  5. Veterinary Appointment (Whiskers) - ('15:30', '16:30')
+  6. Evening Snack (Mochi) - ('18:00', '19:00')
+  7. Breakfast (Mochi) - No time window
+  8. Feeding (Whiskers) - No time window
+  9. Litter Box Cleaning (Whiskers) - No time window
+
+============================================================
+TEST 2: FILTER BY STATUS
+============================================================
+
+Pending tasks (8):
+  1. Training Session (Mochi) - Priority: medium
+  2. Morning Walk (Mochi) - Priority: high
+  3. Breakfast (Mochi) - Priority: high
+  4. Play Time (Whiskers) - Priority: medium
+  5. Veterinary Appointment (Whiskers) - Priority: high
+  6. Litter Box Cleaning (Whiskers) - Priority: medium
+  7. Feeding (Whiskers) - Priority: high
+
+Completed tasks (1):
+  1. Evening Snack (Mochi) - Priority: low
+
+============================================================
+TEST 3: FILTER BY PET
+============================================================
+
+Tasks for Mochi (5):
+  1. Training Session - ○ Pending
+  2. Evening Snack - ✓ Completed
+  3. Morning Walk - ○ Pending
+  4. Breakfast - ○ Pending
+
+Tasks for Whiskers (4):
+  1. Play Time - ○ Pending
+  2. Veterinary Appointment - ○ Pending
+  3. Litter Box Cleaning - ○ Pending
+  4. Feeding - ○ Pending
+
+============================================================
+TEST 4: FILTER BY STATUS AND PET
+============================================================
+
+Pending tasks for Mochi (4):
+  1. Training Session
+  2. Morning Walk
+  3. Breakfast
+  4. Feeding
+
+Pending tasks for Whiskers (4):
+  1. Play Time
+  2. Veterinary Appointment
+  3. Litter Box Cleaning
+
+============================================================
+TODAY'S SCHEDULE
+============================================================
+
+Schedule for 2026-06-23 for Mochi (Golden Retriever):
+  07:00—07:45 — Grooming Session (45 min) [high]
+  07:45—08:30 — Morning Walk (45 min) [high]
+  08:30—08:45 — Breakfast (15 min) [high]
+  08:45—09:45 — Veterinary Appointment (60 min) [high]
+  09:45—09:55 — Feeding (10 min) [high]
+  09:55—10:25 — Training Session (30 min) [medium]
+  10:25—10:45 — Play Time (20 min) [medium]
+  10:45—11:00 — Litter Box Cleaning (15 min) [medium]
+Total time: 240 minutes
+
+Reasoning for 2026-06-23:
+Owner availability: 4 hours (240 minutes)
+Scheduled time: 240 minutes
+Remaining time: 0 minutes
+
+✓ Scheduled tasks:
+  • Grooming Session (high priority, 45 min)
+  • Morning Walk (high priority, 45 min)
+  • Breakfast (high priority, 15 min)
+  • Veterinary Appointment (high priority, 60 min)
+  • Feeding (high priority, 10 min)
+  • Training Session (medium priority, 30 min)
+  • Play Time (medium priority, 20 min)
+  • Litter Box Cleaning (medium priority, 15 min)
+
+✗ Dropped tasks (not enough time):
+  • Evening Snack (low priority, 10 min)
+
+============================================================
+```
+
+### Key Scheduler Behaviors Demonstrated
+
+- **Conflict Detection**: All overlapping time windows are identified, including cross-pet conflicts (e.g., Training Session and Play Time in different time windows but owner cannot be in two places).
+- **Sorting by Time**: Tasks are reordered chronologically, with unscheduled tasks placed last.
+- **Filtering by Pet**: Shows that Mochi has 5 tasks (1 completed, 4 pending) and Whiskers has 4 tasks (all pending).
+- **Filtering by Status + Pet**: Enables specific queries like "pending tasks for Mochi" without redundant calls.
+- **Greedy Time-Based Scheduling**: 8 tasks fit in 240 minutes (4 hours), prioritizing high-priority tasks; 1 low-priority task (Evening Snack) is dropped because time is exhausted.
+- **Recurring Task Creation**: When a pending daily task is marked complete, the system creates its next occurrence automatically.

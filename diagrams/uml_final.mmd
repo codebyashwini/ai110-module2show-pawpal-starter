@@ -1,0 +1,92 @@
+classDiagram
+    %% PawPal+ Final UML Class Diagram
+    %% Updated to match final implementation in pawpal_system.py
+
+    class Owner {
+        +string name
+        +int available_hours_per_day
+        +dict preferences
+        +Pet[] pets
+        +get_available_hours() int
+        +set_preferences(dict) void
+        +add_pet(Pet) void
+        +get_all_tasks() Task[]
+    }
+
+    class Pet {
+        +string name
+        +string species
+        +Owner owner
+        +Task[] tasks
+        +get_owner() Owner
+        +display_info() string
+        +add_task(Task) void
+    }
+
+    class Task {
+        +string title
+        +int duration_minutes
+        +string priority
+        +Pet pet
+        +string recurring
+        +date due_date
+        +tuple preferred_time_window
+        +bool completed
+        +get_duration() int
+        +get_priority() string
+        +mark_complete() void
+    }
+
+    class Scheduler {
+        +Owner owner
+        +Pet pet
+        +Task[] tasks
+        +generate_schedule(date, Pet) DailySchedule
+        +sort_tasks_by_priority(Task[]) Task[]
+        +sort_tasks_by_time(Task[]) Task[]
+        +filter_tasks_by_status(Task[], string) Task[]
+        +filter_tasks_by_pet(Pet, Task[]) Task[]
+        +filter_tasks_by_status_and_pet(Pet, string, Task[]) Task[]
+        +mark_task_complete(Task) Task
+        +fit_tasks_in_time(Task[], int) tuple
+        +detect_time_conflicts(Task[]) string[]
+        -_create_scheduled_tasks(Task[], date) ScheduledTask[]
+        -_time_to_minutes(string) int
+        -_get_pet_name(Task) string
+        -_times_overlap(tuple, tuple) bool
+        -_tasks_have_conflicting_times(Task, Task) bool
+        -_format_conflict_warning(Task, Task) string
+    }
+
+    class DailySchedule {
+        +date date
+        +Pet pet
+        +Owner owner
+        +ScheduledTask[] scheduled_tasks
+        +Task[] dropped_tasks
+        +get_total_duration() int
+        +display_plan() string
+        +explain_reasoning() string
+    }
+
+    class ScheduledTask {
+        +Task task
+        +string start_time
+        +string end_time
+        +string explanation
+        +string status
+        +get_duration() int
+        +format_time() string
+    }
+
+    %% Relationships
+    Owner "1" --> "*" Pet : owns
+    Pet "1" --> "*" Task : requires_care
+    Scheduler "1" --> "1" Owner : plans_for
+    Scheduler "1" --> "1" Pet : plans_for
+    Scheduler "1" --> "*" Task : consumes
+    Scheduler "1" --> "1" DailySchedule : generates
+    DailySchedule "1" --> "*" ScheduledTask : contains_scheduled
+    DailySchedule "1" --> "*" Task : contains_dropped
+    ScheduledTask "1" --> "1" Task : wraps
+    Task "many" --> "1" Pet : assigned_to

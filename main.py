@@ -28,6 +28,16 @@ task1 = Task(
 )
 pet1.add_task(task1)
 
+# Add a conflicting task for the same pet (overlaps with task1)
+task1_conflict = Task(
+    title="Grooming Session",
+    duration_minutes=45,
+    priority="high",
+    preferred_time_window=("15:30", "16:30"),
+    recurring="one-time"
+)
+pet1.add_task(task1_conflict)
+
 task2 = Task(
     title="Evening Snack",
     duration_minutes=10,
@@ -63,6 +73,16 @@ task5 = Task(
 )
 pet2.add_task(task5)
 
+# Add a task that conflicts with pet1's training session (cross-pet conflict)
+task5_conflict = Task(
+    title="Veterinary Appointment",
+    duration_minutes=60,
+    priority="high",
+    preferred_time_window=("15:30", "16:30"),
+    recurring="one-time"
+)
+pet2.add_task(task5_conflict)
+
 task6 = Task(
     title="Litter Box Cleaning",
     duration_minutes=15,
@@ -82,12 +102,25 @@ pet2.add_task(task7)
 # Mark one task as completed to test filtering
 task2.mark_complete()
 
+scheduler = Scheduler(owner)
+
+print("\n" + "=" * 60)
+print("CONFLICT DETECTION")
+print("=" * 60)
+
+all_tasks = owner.get_all_tasks()
+conflicts = scheduler.detect_time_conflicts(all_tasks)
+
+if conflicts:
+    print(f"\n⚠️  Found {len(conflicts)} time conflict(s):\n")
+    for warning in conflicts:
+        print(f"  {warning}")
+else:
+    print("\n✓ No time conflicts detected!")
+
 print("\n" + "=" * 60)
 print("TEST 1: SORT BY TIME")
 print("=" * 60)
-
-scheduler = Scheduler(owner)
-all_tasks = owner.get_all_tasks()
 
 print("\nAll tasks (in original order):")
 for i, task in enumerate(all_tasks, 1):
